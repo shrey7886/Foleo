@@ -193,9 +193,9 @@ export default function BrokerPage() {
     }
   }, [searchParams, setSearchParams]);
 
+  // Does not clear `error`: on page load that would wipe the OAuth error passed back in the URL.
   const fetchData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const [zStatus, zAccounts, uStatus, uAccounts] = await Promise.all([
         zerodha.status().catch(() => null),
@@ -219,6 +219,7 @@ export default function BrokerPage() {
   }, []);
 
   const handleLink = async (provider) => {
+    setError(null);
     setLinkingProvider(provider);
     try {
       const data = await PROVIDERS[provider].api.start();
@@ -232,6 +233,7 @@ export default function BrokerPage() {
   };
 
   const handleUnlink = async (provider, accountId) => {
+    setError(null);
     try {
       await PROVIDERS[provider].api.unlink(accountId);
       fetchData();

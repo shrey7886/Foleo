@@ -20,15 +20,13 @@ export function AuthProvider({ children }) {
     setUser({ userId: data.user_id, email });
   };
 
+  // `loading` only means "verifying a saved session at startup". Auth actions must not toggle it:
+  // the router renders nothing while it is true, which unmounted the login page (and lost its
+  // error message) during every sign-in request. The page shows its own spinner instead.
   const login = useCallback(async ({ email, password }) => {
-    setLoading(true);
-    try {
-      const data = await authAPI.login({ email, password });
-      _persist(data, email);
-      return data;
-    } finally {
-      setLoading(false);
-    }
+    const data = await authAPI.login({ email, password });
+    _persist(data, email);
+    return data;
   }, []);
 
   // Registration only creates the account; the user then signs in explicitly.
@@ -36,15 +34,7 @@ export function AuthProvider({ children }) {
     return authAPI.register({ email, password, display_name: displayName });
   }, []);
 
-  const forgotPassword = useCallback(async (email) => {
-    setLoading(true);
-    try {
-      const data = await authAPI.forgotPassword(email);
-      return data;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const forgotPassword = useCallback(async (email) => authAPI.forgotPassword(email), []);
 
   const logout = useCallback(() => {
     localStorage.removeItem("sm_token");
