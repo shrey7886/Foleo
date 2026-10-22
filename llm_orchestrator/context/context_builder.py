@@ -23,6 +23,8 @@ def build_portfolio_context(
     total_current_value: float = 0.0,
     total_pnl: float = 0.0,
     total_pnl_pct: float = 0.0,
+    sector_count: int = 0,
+    portfolio_beta: float | None = None,
 ) -> dict:
     """
     Returns a rich context dict fed into the system prompt and LLM.
@@ -37,6 +39,8 @@ def build_portfolio_context(
         total_current_value=total_current_value,
         total_pnl=total_pnl,
         total_pnl_pct=total_pnl_pct,
+        sector_count=sector_count,
+        portfolio_beta=portfolio_beta,
     )
 
     holdings_summary = []

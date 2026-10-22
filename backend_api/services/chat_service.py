@@ -17,7 +17,7 @@ def _fetch_portfolio_summary(user_id: str) -> dict:
     Attempt to get live portfolio data, merged across every linked broker.
     Falls back to an empty portfolio if no broker is linked or unavailable.
     """
-    from backend_api.routes.portfolio import _get_live_holdings
+    from backend_api.routes.portfolio import _get_live_holdings, _sector_count_and_beta
 
     holdings, _short_circuit = _get_live_holdings(user_id)
     if not holdings:
@@ -34,6 +34,8 @@ def _fetch_portfolio_summary(user_id: str) -> dict:
     total_current = sum(float(h.get("last_price", 0)) * float(h.get("quantity", 0)) for h in holdings)
     total_pnl = total_current - total_invested
     total_pnl_pct = (total_pnl / total_invested * 100.0) if total_invested > 0 else 0.0
+    # Same inputs as the dashboard's health score, so chat and dashboard report the same number.
+    sector_count, portfolio_beta = _sector_count_and_beta(holdings)
 
     return {
         "account_id": None,
@@ -42,6 +44,8 @@ def _fetch_portfolio_summary(user_id: str) -> dict:
         "total_current_value": round(total_current, 2),
         "total_pnl": round(total_pnl, 2),
         "total_pnl_pct": round(total_pnl_pct, 2),
+        "sector_count": sector_count,
+        "portfolio_beta": portfolio_beta,
     }
 
 
@@ -83,6 +87,8 @@ def chat(user_id: str, message: str, response_mode: str = "quick") -> ChatReply:
         total_current_value=portfolio_summary.get("total_current_value", 0.0),
         total_pnl=portfolio_summary.get("total_pnl", 0.0),
         total_pnl_pct=portfolio_summary.get("total_pnl_pct", 0.0),
+        sector_count=portfolio_summary.get("sector_count", 0),
+        portfolio_beta=portfolio_summary.get("portfolio_beta"),
     )
     reply.proactive_insights = generate_proactive_insights(
         holdings=holdings,
@@ -106,6 +112,8 @@ def chat_proactive_insights(user_id: str) -> list[dict]:
         total_current_value=portfolio_summary.get("total_current_value", 0.0),
         total_pnl=portfolio_summary.get("total_pnl", 0.0),
         total_pnl_pct=portfolio_summary.get("total_pnl_pct", 0.0),
+        sector_count=portfolio_summary.get("sector_count", 0),
+        portfolio_beta=portfolio_summary.get("portfolio_beta"),
     )
     return generate_proactive_insights(
         holdings=holdings,

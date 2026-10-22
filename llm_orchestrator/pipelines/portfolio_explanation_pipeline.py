@@ -192,6 +192,8 @@ class PortfolioExplanationPipeline:
             total_current_value=total_current_value,
             total_pnl=portfolio_summary.get("total_pnl", 0.0),
             total_pnl_pct=portfolio_summary.get("total_pnl_pct", 0.0),
+            sector_count=portfolio_summary.get("sector_count", 0),
+            portfolio_beta=portfolio_summary.get("portfolio_beta"),
         )
 
         tool_start = time.perf_counter()
