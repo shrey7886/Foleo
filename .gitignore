@@ -233,3 +233,9 @@ __marimo__/
 
 # Render environment (contains secrets)
 .env.render
+
+# Local tooling and Office lock files
+.kilo/
+~$*
+# Old project folder left locally after the move to foleo/ + tft/
+Stock-Mate/

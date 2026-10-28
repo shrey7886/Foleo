@@ -1,167 +1,247 @@
-# Stock-Mate
+# Foleo
 
-Stock-Mate is an AI-powered portfolio dashboard that connects to your Zerodha and/or Upstox brokerage accounts and gives you a live, consolidated view of your holdings, an AI chat assistant for portfolio questions, a portfolio optimizer that turns your real holdings into concrete rebalance orders, and market analytics — performance vs. NIFTY 50 (with a "what if you'd invested in NIFTY instead" comparison), sector allocation with concentration alerts, a sector- and beta-aware portfolio health score with a shareable PNG report card, an India VIX Fear & Greed gauge, per-stock fundamentals, a market overview widget, a news digest, themed stock baskets, price alerts, and more.
+**An AI portfolio assistant for Indian investors that gets the numbers exactly right.**
 
-## How It Works
+Foleo links to your Zerodha or Upstox account and combines a live portfolio dashboard with a chat assistant. When you ask for a number (Sharpe ratio, Value at Risk, drawdown, RSI, P&L), Foleo computes it with tested code instead of letting a language model guess. The answer is exact, takes milliseconds and costs zero LLM tokens. Open-ended questions ("how is my portfolio doing?", "how should I rebalance?") go to the LLM, with your real portfolio as context.
 
-1. **Connect your portfolio** — link your Zerodha account via Kite Connect OAuth, your Upstox account via Upstox OAuth, or both — holdings from every connected broker are merged into one consolidated view, tagged by broker
-2. **Live holdings** — the dashboard pulls your current holdings, P&L, and a sector- and beta-aware portfolio health score directly from your linked broker(s), with a weighted portfolio Beta badge (Conservative/Market-aligned/Aggressive) and a one-click shareable PNG report card
-3. **Market analytics** — portfolio performance is benchmarked against NIFTY 50 (with a "what if you'd invested in NIFTY instead" reality-check callout), holdings are broken down by sector with over-concentration warnings, and a market overview widget shows NIFTY 50/SENSEX levels, an India VIX Fear & Greed gauge, plus your top gainers/losers
-4. **Stock financials** — click any holding to see its fundamentals (P/E, market cap, dividend yield, 52-week range, beta) alongside your own position in that stock
-5. **News & baskets** — a News page shows the latest headlines for your top holdings, and a Baskets page groups stocks into curated themes (EV, Banking, IT Services, and more), highlighting which ones you already hold
-6. **AI chat** — an LLM-backed assistant (Groq or OpenAI) answers portfolio questions with buy/hold/trim guidance and proactive insights, with portfolio-aware suggested prompts to get started
-7. **Portfolio optimizer** — an Optimize page runs mean-variance optimization on your live holdings (Min Risk, Max Sharpe, or signal-driven Black-Litterman) and returns concrete BUY/SELL share orders, an efficient-frontier chart, a 12-month Monte Carlo projection with VaR/CVaR, and a capital-gains tax estimate on the sells; asking the chat assistant "how should I rebalance?" runs the same engine
-8. **Price alerts** — set a target price and direction (above/below) for any stock from its fundamentals panel; a background job checks prices every 15 minutes and notifies you via a bell icon in the nav bar and a dedicated "My Alerts" page
+**Live demo: [foleo-one.vercel.app](https://foleo-one.vercel.app)**
 
-## Architecture
+---
 
-| Component | Description |
+## Contents
+
+- [Try it in two minutes](#try-it-in-two-minutes)
+- [What to ask the assistant](#what-to-ask-the-assistant)
+- [Everything else in the app](#everything-else-in-the-app)
+- [How it works](#how-it-works)
+- [Why deterministic tools: our results](#why-deterministic-tools-our-results)
+- [Tech stack](#tech-stack)
+- [Repository layout](#repository-layout)
+- [Run it locally](#run-it-locally)
+- [Tests](#tests)
+- [Deployment](#deployment)
+- [Team](#team)
+
+---
+
+## Try it in two minutes
+
+1. **Open [foleo-one.vercel.app](https://foleo-one.vercel.app)** and click **GET STARTED**.
+2. **Create an account.** Choose the **Register** tab, enter any email and a password (6+ characters) and click **CREATE ACCOUNT**. You will see *"Account created successfully. Please sign in."* and the form switches to **Sign In** with your email filled in.
+3. **Sign in.** Enter your password and click **SIGN IN**. You land on the **Portfolio** dashboard.
+4. **Load a portfolio.** No broker account needed:
+   - Click **Try a demo portfolio**. Foleo loads six NSE stocks (TCS, HDFCBANK, RELIANCE, INFY, ITC, SUNPHARMA), priced at the latest market close, and every page and the assistant work on it.
+   - If you have a Zerodha or Upstox account, use **Broker → Link** instead to see your own holdings. Broker linking goes through the brokers' OAuth apps registered to our team, so for review purposes the demo portfolio is the reliable path.
+5. **Open the Assistant** (left sidebar) and try the prompts below.
+
+> **Good to know**
+> - The login messages are explicit: signing in without an account says *"Account does not exist. Please register first."*, and registering an existing email says *"An account with this email already exists. Please sign in."*
+> - The backend is kept awake around the clock. If a page ever takes longer than usual, it is waking up; give it up to a minute.
+> - This is a demo deployment: accounts are stored in a lightweight SQLite database and are reset whenever a new version is deployed. If your login stops working, simply register again.
+
+---
+
+## What to ask the assistant
+
+Foleo's assistant has two paths. Questions that ask for a **metric** are routed to deterministic tools; everything else goes to the LLM.
+
+### 1. Exact numbers (deterministic tools, 0 LLM tokens)
+
+If you don't name a stock, the metric is computed for **your whole portfolio**. You can add a period such as *"over the last 3 months"*, *"past year"* or *"over 2 years"*. Each answer states the stocks and the price window it used.
+
+| Ask | What you get |
 |---|---|
-| `backend_api` | FastAPI REST API — auth, portfolio, Zerodha OAuth, chat, market data, portfolio optimizer (`services/optimizer_service.py`) |
-| `llm_orchestrator` | LLM reasoning layer behind the chat assistant |
-| `frontend` | React + Vite web dashboard |
+| `Calculate invested value, current value, profit or loss, and percentage profit or loss for each holding. Classify the portfolio as Buy, Hold, Trim, or Exit using only the supplied arithmetic.` | Invested value, current value, P&L, P&L % and a Buy / Hold / Trim / Exit decision from a fixed rule. **This is the project's main benchmark prompt.** |
+| `What is the Sharpe ratio of my portfolio over the last 3 months?` | Risk-adjusted return (5% risk-free rate, sample std, √252) |
+| `What is the 95% value at risk of my portfolio over the last 3 months?` | 1-day historical VaR at 95% |
+| `What is the maximum drawdown of my portfolio over the last 3 months?` | Worst peak-to-trough fall |
+| `What is the volatility of my portfolio?` | Annualised volatility |
+| `What is the total return of my portfolio over the past year?` | Total return over the window |
+| `What is the beta of my portfolio?` | Beta versus NIFTY 50 |
+| `What is the Sortino ratio of my portfolio?` | Downside-risk-adjusted return |
+| `What is the CAGR of my portfolio over 2 years?` | Compound annual growth rate |
+| `What is the momentum of my portfolio?` | 21-day momentum |
+| `What is the RSI of TCS?` | 14-day RSI for one stock |
+| `What is the 50-day moving average of RELIANCE?` | 50- or 200-day moving average |
+| `What is the beta of INFY?` | Stock beta versus NIFTY 50 |
+| `What is the correlation between TCS and INFY?` | Correlation of daily returns |
+| `What is the volatility of HDFCBANK over 6 months?` | Any metric, any stock, any window |
+| `How concentrated is my portfolio?` | Largest holding weight |
 
-Data is stored in a local SQLite database (`backend_api/database/backend.db`, created automatically on first run) — no external database is required.
+The router understands plain English: *"my portfolio"* means all your holdings, broker symbols are mapped to the right exchange (`IDEA` → `IDEA.NS`, not the unrelated US ticker), and ordinary words like *"portfolio"* or *"maximum"* are never mistaken for tickers.
 
-## Features
+### 2. Advice and explanations (LLM with your portfolio as context)
 
-- **Portfolio summary** — live holdings, invested value, P&L, and a 6-factor portfolio health score (diversification, performance, risk management, concentration, sector spread, beta fit)
-- **Portfolio Beta badge** — a value-weighted portfolio beta computed across your holdings' individual betas, labeled Conservative (<0.8), Market-aligned (0.8–1.2), or Aggressive (>1.2)
-- **Shareable portfolio report card** — a one-click "Share" button renders your health score, total P&L, top performer, and sector allocation into a branded PNG image you can download and share, entirely client-side (no data leaves your browser)
-- **Portfolio vs NIFTY 50 benchmark** — indexed performance chart (1M/3M/6M/1Y) comparing your current holdings against the NIFTY 50, using historical prices via yfinance, plus a "What if you'd invested in NIFTY 50 instead?" reality-check comparing your actual invested amount against an equivalent NIFTY-only investment over the same period
-- **Sector allocation** — donut chart of holdings by sector (via yfinance), with a warning banner if any sector exceeds 40% of the portfolio
-- **India VIX Fear & Greed gauge** — a live India VIX reading on the market overview widget, translated into an Extreme Greed / Greed / Neutral / Fear / Extreme Fear sentiment label
-- **Stock financials panel** — click any holding to view its fundamentals (P/E ratio, market cap, dividend yield, 52-week high/low, beta) fetched from yfinance and cached daily
-- **Market overview widget** — live NIFTY 50 and SENSEX levels with day change, the India VIX gauge, plus your top 5 gaining and losing holdings
-- **News digest** — latest headlines for your top holdings (or a default watchlist if unlinked), fetched from yfinance and cached daily, each headline scored positive/negative/neutral via FinBERT
-- **Themed stock baskets** — curated stock groupings by theme (EV, Banking, IT Services, Pharma, FMCG, and more), with your own holdings highlighted
-- **AI chat assistant** — natural-language portfolio Q&A with action tags (Hold/Trim/Add/Watch/Rebalance), proactive insights, and portfolio-aware suggested prompts (diversification, riskiest holding, replacement ideas, sector exposure) to get the conversation started
-- **Portfolio optimizer** — mean-variance optimization on your live merged holdings with Ledoit-Wolf covariance shrinkage and per-name weight caps; three objectives (Min Risk, Max Sharpe, and signal-driven **Black-Litterman** that turns the chat assistant's Add/Trim views into return views); outputs an interactive efficient frontier, current-vs-optimized stats, discrete BUY/SELL **share orders**, a 12-month Monte Carlo projection cone with 1-day VaR/CVaR, and a **capital-gains tax estimate** (STCG 20% / LTCG 12.5% over the ₹1.25L exemption) with a per-holding "held ≤ 1 year" toggle. The chat `rebalancing` intent runs the same optimizer and narrates the orders. Powered by `PyPortfolioOpt` + yfinance history; not investment advice.
-- **Zerodha & Upstox account linking** — OAuth-based linking/unlinking for both brokers, multiple accounts per broker, primary account selection, holdings from every connected broker merged into one portfolio and badged by source
-- **Price alerts** — per-stock target-price alerts with an above/below direction, one active alert per stock+direction (creating a new one replaces the old), checked automatically every 15 minutes against live prices, with a nav-bar bell notification (unread count badge, dismiss/reset actions) and a "My Alerts" management page
+| Ask | What you get |
+|---|---|
+| `How is my portfolio doing?` | Overall verdict, health score, biggest risk and one concrete action |
+| `Which holding is dragging me down?` | The weakest position and what to do about it |
+| `Give me a rebalancing plan` | Trim/add amounts based on weights and momentum |
+| `What is the tax impact if I sell now?` | Unrealised gains/losses with current STCG/LTCG rules (Budget 2024) |
+| `Add WIPRO to my watchlist` | Manages your watchlist from chat |
+| `Set a goal: ₹10 lakh in 5 years` | Saves the goal, works out the monthly SIP and tracks progress in later chats |
 
-## Prerequisites
+Use the **Quick / Explain** switch at the top of the chat: *Quick* gives short answers; *Explain* walks through the reasoning. The chips under each answer suggest sensible follow-up questions.
 
-Install these before running the app:
+---
 
-- **Python 3.10+** (required — `backend_api/models/schemas.py` uses `X | None` type syntax that is not supported on Python 3.9)
-- **Node.js 18+** and npm (for the Vite/React frontend)
-- A **Zerodha Kite Connect** developer app (API key + secret) — [https://developers.kite.trade](https://developers.kite.trade) — needed to link a real Zerodha account
-- Optional: an **Upstox** developer app (API key + secret) — [https://upstox.com/developer](https://upstox.com/developer) — needed to link a real Upstox account
-- Optional: a **Groq** or **OpenAI** API key to power the AI chat assistant (the app defaults to Groq, which has a free tier)
+## Everything else in the app
 
-No Docker and no external database are required to run the app locally.
+| Page | What it does |
+|---|---|
+| **Portfolio** | Holdings, invested value, P&L, a 6-factor health score (diversification, performance, risk, concentration, sector spread, beta fit), sector allocation with concentration alerts, performance vs NIFTY 50, India VIX gauge, market overview, and a shareable PNG report card |
+| **Optimize** | Mean-variance optimisation of your actual holdings (Min Risk, Max Sharpe or Black-Litterman), with concrete BUY/SELL orders, efficient frontier, 12-month Monte Carlo with VaR/CVaR and a capital-gains tax estimate |
+| **Assistant** | The chat described above |
+| **News** | Latest headlines for your top holdings |
+| **Baskets** | Curated themes (EV, Banking, IT Services and more), highlighting what you already hold |
+| **Alerts** | Price alerts checked every 15 minutes, with in-app notifications |
+| **Broker** | Link or unlink Zerodha and Upstox; holdings from both are merged |
 
-## Setup
+---
 
-### 1. Backend
+## How it works
+
+```mermaid
+flowchart TD
+    U[User message] --> I[Intent classifier<br/>14 rule-based intents]
+    I --> C[Context builder<br/>merged Zerodha + Upstox holdings]
+    C --> R{Quantitative router<br/>metric, stock or portfolio, period}
+    R -- metric matched --> T[Deterministic tools<br/>exact, milliseconds, 0 tokens]
+    R -- open question --> L[LLM: gpt-oss-120b on Groq<br/>with portfolio + RAG context]
+    M[(Market data<br/>Yahoo Finance)] --> T
+    L -- empty or failed reply --> F[Deterministic fallback summary]
+```
+
+- **Portfolio scope.** For a portfolio question Foleo builds the daily value series `V_t = Σ qᵢ · Pᵢ,ₜ` of your current holdings and computes the metric on it, so stock-level and portfolio-level answers share one tested implementation.
+- **Fixed definitions.** Each metric has one documented formula (e.g. VaR = −100 × 5th percentile of daily returns with linear interpolation; RSI-14 with simple averages), checked against an independent pandas reference in the test suite.
+- **Safety rails.** A reply that comes back empty (reasoning models can spend their whole budget thinking) is replaced by a deterministic summary, so users never see a blank answer. The Buy/Hold/Trim/Exit rule is a fixed, transparent rule and not investment advice.
+
+---
+
+## Why deterministic tools: our results
+
+We benchmarked 26 portfolio questions (arithmetic, stock metrics and portfolio risk metrics) against an independent pandas reference, on a pinned 3-month NSE price snapshot. The Groq LLM arms ran 3 times per prompt.
+
+| Task tier | Foleo tools | Groq LLM given all the data | Groq chatbot without price history |
+|---|---|---|---|
+| Portfolio arithmetic | **10/10** | 30/30 | 29/30 |
+| Stock metrics (return, drawdown, VaR, RSI) | **12/12** | 21/36 | 0/36 |
+| Portfolio risk (Sharpe, VaR, drawdown, return) | **4/4** | 3/12 | 0/12 |
+| LLM tokens per answer | **0** | 1,421 – 4,867 | ≈ 2,300 – 2,700 |
+| Median time per answer | **0.1 – 3.3 ms** | 2.5 – 9.7 s | 1.2 – 1.9 s |
+
+What we learned:
+
+- **Arithmetic is not the weak point; time series are.** Given a 67-day price table, the LLM often ran out of its token budget before finishing (none of its 9 VaR answers completed) and once returned a wrong RSI with convincing working.
+- **Without price data the LLM usually declines, but not always.** In 1 of 48 cases it answered the 3-month return with the gain since purchase (−6.74% instead of −19.27%).
+- **Code execution fixes arithmetic, not definitions.** ChatGPT and Claude, running their own code, matched most values, but ChatGPT used its own RSI formula (3 wrong values), and Claude chose *Hold* when no decision rule was given.
+- **In a live run on a real Upstox account (22 Oct 2026)**, Foleo, ChatGPT and Claude agreed on all 8 values when ChatGPT and Claude were handed the holdings, 192 prices, every formula and the rule. Foleo needed only the question.
+
+Details: [`foleo/reports/RESEARCH_HANDOUT.md`](foleo/reports/RESEARCH_HANDOUT.md), the paper in [`foleo/paper/`](foleo/paper/) and the raw runs in [`foleo/reports/benchmark_runs/`](foleo/reports/benchmark_runs/).
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, Vite, Tailwind CSS 4, Framer Motion, Recharts (deployed on **Vercel**) |
+| Backend | FastAPI, Uvicorn, APScheduler, SQLite (deployed on **Render**) |
+| AI | Groq `openai/gpt-oss-120b` (OpenAI-compatible), ChromaDB RAG knowledge base, FinBERT news sentiment (Hugging Face) |
+| Quant | pandas, NumPy, yfinance, PyPortfolioOpt (efficient frontier, Ledoit-Wolf shrinkage, Black-Litterman) |
+| Brokers | Zerodha Kite Connect and Upstox OAuth |
+
+---
+
+## Repository layout
+
+```
+foleo/
+├── backend_api/        FastAPI app: auth, brokers, portfolio, chat, optimizer, alerts
+│   ├── routes/         HTTP endpoints (all under /api)
+│   ├── services/       broker clients, chat service, optimizer, market data
+│   ├── database/       SQLite token and user store
+│   └── core/           settings, security, demo portfolio
+├── llm_orchestrator/   the assistant
+│   ├── utils/          quantitative tools + router, intent router, analytics
+│   ├── agents/         LLM response agent (Groq/OpenAI)
+│   ├── pipelines/      end-to-end chat pipeline
+│   ├── context/        portfolio context builder
+│   ├── rag/            finance knowledge base (ChromaDB)
+│   └── prompts/        system prompt
+├── frontend/           React + Vite web app (vercel.json proxies /api to the backend)
+├── tests/              pytest suite: backend and chatbot
+├── scripts/            research benchmark harness and paper tables
+├── reports/            benchmark runs, research handout, presentation
+├── paper/              IEEE-style research paper (LaTeX + PDF)
+├── docs/               design notes
+├── render.yaml         Render blueprint for the backend
+└── .env.example        environment variable template
+.github/workflows/      keep-backend-awake job
+```
+
+---
+
+## Run it locally
+
+You need Python 3.12+, Node.js 20+ and a free [Groq API key](https://console.groq.com).
+
+**Backend**
 
 ```bash
-cd backend_api
-python3 -m venv .venv
+cd foleo
+python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r backend_api/requirements.txt
+cp .env.example .env               # then set GROQ_API_KEY
+uvicorn backend_api.app:app --reload --port 8000
 ```
 
-Create a `.env` file in the repo root (or `backend_api/`) with at least:
+**Frontend** (in a second terminal)
 
 ```bash
-# App
-APP_HOST=0.0.0.0
-APP_PORT=8000
-FRONTEND_URL=http://localhost:5174
-
-# Auth (change these in production)
-JWT_SECRET=change-me-in-prod
-BROKER_TOKEN_SECRET=change-me-too
-OAUTH_STATE_HMAC_SECRET=replace-state-hmac-secret
-
-# Zerodha Kite Connect
-ZERODHA_API_KEY=your-kite-api-key
-ZERODHA_API_SECRET=your-kite-api-secret
-ZERODHA_REDIRECT_URL=http://localhost:8000/api/zerodha/callback
-
-# Upstox
-UPSTOX_API_KEY=your-upstox-api-key
-UPSTOX_API_SECRET=your-upstox-api-secret
-UPSTOX_REDIRECT_URL=http://localhost:8000/api/upstox/callback
-
-# LLM provider for the chat assistant: "groq" (free) or "openai"
-LLM_PROVIDER=groq
-GROQ_API_KEY=your-groq-api-key
-# OPENAI_API_KEY=your-openai-api-key
-
-# Optional: powers the News Digest sentiment badges (FinBERT) and the chat
-# assistant's knowledge retrieval (embeddings) — both call Hugging Face's hosted
-# Inference API instead of loading models locally, to keep the backend light to
-# host. Free token from https://huggingface.co/settings/tokens.
-# Without it, news/chat still work, just without sentiment badges / RAG context.
-HF_API_TOKEN=your-hf-token
-```
-
-Run the backend:
-
-```bash
-python main.py
-```
-
-The API is served at `http://localhost:8000` (docs at `/docs`).
-
-### 2. Frontend
-
-```bash
-cd frontend
+cd foleo/frontend
 npm install
-npm run dev
+npm run dev                        # http://localhost:5174, proxies /api to port 8000
 ```
 
-The dashboard is served at `http://localhost:5174` and proxies API calls to the backend.
+Open http://localhost:5174, register, sign in and click **Try a demo portfolio**.
 
-## Deploying
+---
 
-**Backend → Render.** `render.yaml` at the repo root defines a web service: builds
-`backend_api/requirements.txt`, runs `uvicorn backend_api.app:app`. In the Render dashboard,
-connect the repo, it'll pick up `render.yaml` automatically ("Blueprint" deploy), then fill
-in the `sync: false` env vars (broker keys, `GROQ_API_KEY`, `HF_API_TOKEN`, `FRONTEND_URL` —
-set this to your Vercel URL once you have it). Note: Render's free plan doesn't support
-persistent disks, so the SQLite database resets on every redeploy/restart — fine for a demo,
-not for real user data. To persist it, upgrade the service to a paid plan, add a disk
-(`mountPath: /var/data`), and set `DB_PATH=/var/data/backend.db` as an env var.
+## Tests
 
-**Frontend → Vercel.** Import the repo with `frontend` as the project root. Before deploying,
-edit `frontend/vercel.json` and replace `YOUR-RENDER-BACKEND-URL` with your actual Render
-service URL — this rewrites `/api/*` requests to the backend so the existing relative-path
-`fetch("/api/...")` calls keep working unchanged and there's no CORS to configure.
-
-## Broker notes
-
-- Holdings from every broker you've linked (Zerodha, Upstox) are fetched and merged into a single consolidated portfolio for all analytics — sector allocation, benchmark, news digest, and stock financials all operate on the merged set automatically.
-- Each holding is tagged with its source broker and shown with a small "Zerodha"/"Upstox" badge in the holdings tables.
-- If you only link one broker, everything works exactly as before; if a linked broker's token expires or is invalid, that broker's holdings are simply omitted from the merge (with a reconnect prompt) rather than failing the whole page.
-
-## Market data notes
-
-- Historical/benchmark, sector-allocation, fundamentals, index, VIX, and news data are all fetched live from **Yahoo Finance** via `yfinance` (NSE symbols first, BSE as a fallback) — no API key required, but it does need outbound internet access.
-- Sector classifications are cached in SQLite and refreshed at most once a week per symbol; stock fundamentals (including per-stock beta, used for the portfolio Beta badge) and news headlines are cached and refreshed at most once a day per symbol, to minimize external calls.
-- Themed stock baskets are curated, static reference data seeded into SQLite on first run — they are not fetched from an external API and do not go stale.
-- If Yahoo Finance is temporarily unreachable, the affected endpoints degrade gracefully (empty chart/panel/`data_status: market_data_unavailable`) instead of failing the whole dashboard — including the VIX gauge and Beta badge, which simply hide rather than error.
-
-## Price alerts notes
-
-- Set an alert from any stock's fundamentals panel (target price + Above/Below direction). Only one active alert per stock+direction per user is kept — creating another one for the same stock/direction replaces it.
-- A background job (`APScheduler`, started with the FastAPI app) checks all active alerts against live prices from `yfinance` every 15 minutes. Prices are fetched once per distinct symbol per run, even if multiple alerts share a ticker.
-- Triggered alerts show up as a badge count on the bell icon in the sidebar, with a dropdown to dismiss or reset them; the "My Alerts" page (`/alerts`) lists and lets you delete all of your alerts, active or triggered.
-- If a price fetch fails for a symbol, that symbol is skipped for the run and the rest of the batch still runs — a fetch failure never crashes the scheduled job.
-
-## Project Structure
+```bash
+cd foleo
+python -m pytest tests -q
 ```
-Stock-Mate/
-├── backend_api/         # FastAPI backend (auth, portfolio, Zerodha, Upstox, alerts, chat, market data)
-│   ├── routes/          # API route modules (incl. alerts.py)
-│   ├── services/        # Zerodha, Upstox, broker token, market data, and alert-checking services
-│   ├── database/        # SQLite access layer
-│   └── models/          # Pydantic request/response schemas
-├── llm_orchestrator/    # LLM chat/recommendation logic
-├── frontend/            # React + Vite dashboard (incl. AlertsPage, alert bell in nav)
-└── tests/               # Test suite
-```
+
+The suite (82 tests) covers the quantitative tools against an independent reference, the router (portfolio scope, exchange mapping, word boundaries), the benchmark scorer, portfolio analytics, the optimizer, the auth flow (all four register/sign-in cases), demo mode and the dashboard/chat health-score consistency.
+
+---
+
+## Deployment
+
+| Part | Where | Notes |
+|---|---|---|
+| Web app | Vercel, project `foleo` | Built from `foleo/frontend`; `vercel.json` rewrites `/api/*` to the backend, so the browser talks to one origin |
+| Backend | Render web service `foleo-backend` | Root directory `foleo`, build `pip install -r backend_api/requirements.txt`, start `uvicorn backend_api.app:app --host 0.0.0.0 --port $PORT`, health check `/api/health` |
+| Keep-awake | GitHub Actions, [`keep-backend-warm.yml`](.github/workflows/keep-backend-warm.yml) | Pings `/api/health` every 5 minutes so Render's free tier never sleeps |
+
+Backend health: <https://foleo-backend-ta2h.onrender.com/api/health>
+
+---
+
+## Team
+
+Capstone project, National Institute of Technology Karnataka (NITK), Surathkal.
+
+- **Shrey Golekar** (231DS031)
+- **Sanchit Srisha Udupa** (231IT060)
+- **Prasanna Kumar** (231MN010)
+
+Guide: **Dr. Shrutilipi Bhattacharjee**
+
+---
+
+*Foleo is an educational project. Nothing it shows is investment advice.*
